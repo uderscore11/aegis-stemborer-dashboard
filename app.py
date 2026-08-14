@@ -333,36 +333,23 @@ else:
 
 
 legend_html = f"""
-<div style="
-    padding: 14px;
-    border: 1px solid #d0d0d0;
-    border-radius: 8px;
-    margin-bottom: 12px;
-">
-<b>{legend_title}</b><br><br>
+<div style="padding:14px; border:1px solid #555; border-radius:8px; margin-bottom:15px;">
+    <div style="font-weight:700; margin-bottom:12px;">{legend_title}</div>
 """
 
 for color, label in legend_items:
-
-    legend_html += f"""
-    <div style="margin-bottom:6px;">
-        <span style="
-            display:inline-block;
-            width:18px;
-            height:18px;
-            background:{color};
-            border:1px solid #555;
-            margin-right:8px;
-            vertical-align:middle;
-        "></span>
-        {label}
-    </div>
-    """
+    legend_html += (
+        f'<div style="display:flex; align-items:center; margin-bottom:7px;">'
+        f'<span style="display:inline-block; width:18px; height:18px; '
+        f'background-color:{color}; border:1px solid #777; '
+        f'margin-right:10px;"></span>'
+        f'<span>{label}</span>'
+        f'</div>'
+    )
 
 legend_html += "</div>"
 
 st.markdown(legend_html, unsafe_allow_html=True)
-
 
 # ==================================================
 # CREATE MAP
