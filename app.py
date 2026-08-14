@@ -576,7 +576,96 @@ st.dataframe(
     use_container_width=True,
     hide_index=True
 )
+# ==================================================
+# ADD NEW REPORT
+# ==================================================
 
+st.divider()
+
+st.header("Report Stem Borer Infestation")
+
+st.caption(
+    "Use this form to encode a new reported stem borer infestation."
+)
+
+if "submitted_reports" not in st.session_state:
+    st.session_state.submitted_reports = []
+
+with st.form("report_form", clear_on_submit=True):
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        report_date = st.date_input("Date observed")
+
+        report_barangay = st.selectbox(
+            "Barangay",
+            sorted(df["Barangay"].unique())
+        )
+
+    with col2:
+        affected_area = st.number_input(
+            "Affected rice area (ha)",
+            min_value=0.0,
+            step=0.1
+        )
+
+        severity = st.number_input(
+            "Estimated damage severity (%)",
+            min_value=0.0,
+            max_value=100.0,
+            step=1.0
+        )
+
+    remarks = st.text_area(
+        "Remarks / observation",
+        placeholder="Describe the observed infestation..."
+    )
+
+    submitted = st.form_submit_button(
+        "Submit Report",
+        type="primary"
+    )
+
+    if submitted:
+
+        new_report = {
+            "Date Observed": str(report_date),
+            "Barangay": report_barangay,
+            "Affected Area (ha)": affected_area,
+            "Severity (%)": severity,
+            "Remarks": remarks
+        }
+
+        st.session_state.submitted_reports.append(new_report)
+
+        st.success(
+            f"Report for {report_barangay} was successfully submitted."
+        )
+
+
+if st.session_state.submitted_reports:
+
+    st.subheader("Submitted Reports")
+
+    report_df = pd.DataFrame(
+        st.session_state.submitted_reports
+    )
+
+    st.dataframe(
+        report_df,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    csv = report_df.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        "Download Submitted Reports",
+        data=csv,
+        file_name="aegis_submitted_reports.csv",
+        mime="text/csv"
+    )
 
 # ==================================================
 # FOOTER
