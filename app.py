@@ -178,9 +178,9 @@ with col3:
 with col4:
     st.metric(
         "Highest IPI",
-        f"{highest_barangay}",
-        f"IPI = {highest_ipi:.3f}"
+        f"{highest_barangay}"
     )
+    st.caption(f"IPI = {highest_ipi:.3f}")
 
 
 st.divider()
