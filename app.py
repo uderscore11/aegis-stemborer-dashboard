@@ -7,9 +7,9 @@ import plotly.express as px
 from streamlit_folium import st_folium
 
 
-# --------------------------------------------------
+# ==================================================
 # PAGE SETTINGS
-# --------------------------------------------------
+# ==================================================
 
 st.set_page_config(
     page_title="AEGIS | Stem Borer Dashboard",
@@ -18,17 +18,17 @@ st.set_page_config(
 )
 
 
-# --------------------------------------------------
-# LOAD GEOJSON DATA
-# --------------------------------------------------
+# ==================================================
+# LOAD GEOJSON
+# ==================================================
 
 with open("norala_barangay.geojson", "r", encoding="utf-8") as f:
     geojson_data = json.load(f)
 
 
-# --------------------------------------------------
-# CONVERT GEOJSON ATTRIBUTES TO DATAFRAME
-# --------------------------------------------------
+# ==================================================
+# PREPARE DATAFRAME
+# ==================================================
 
 records = []
 
@@ -37,18 +37,18 @@ for feature in geojson_data["features"]:
 
     records.append({
         "Barangay": p.get("NAME_3"),
-        "Total Reports": p.get("Total_Repo", 0),
-        "Affected Area (ha)": p.get("Affected_A", 0),
-        "Severity (%)": p.get("Severity", 0),
-        "IPI": p.get("IPI", 0)
+        "Total Reports": float(p.get("Total_Repo", 0) or 0),
+        "Affected Area (ha)": float(p.get("Affected_A", 0) or 0),
+        "Severity (%)": float(p.get("Severity", 0) or 0),
+        "IPI": float(p.get("IPI", 0) or 0)
     })
 
 df = pd.DataFrame(records)
 
 
-# --------------------------------------------------
+# ==================================================
 # PRIORITY CLASSIFICATION
-# --------------------------------------------------
+# ==================================================
 
 def classify_priority(ipi):
     if ipi == 0:
@@ -65,8 +65,6 @@ def classify_priority(ipi):
 
 df["Priority"] = df["IPI"].apply(classify_priority)
 
-
-# Add priority back to GeoJSON for map tooltip
 priority_lookup = dict(zip(df["Barangay"], df["Priority"]))
 
 for feature in geojson_data["features"]:
@@ -77,24 +75,73 @@ for feature in geojson_data["features"]:
     )
 
 
-# --------------------------------------------------
-# DASHBOARD HEADER
-# --------------------------------------------------
+# ==================================================
+# SIDEBAR
+# ==================================================
+
+with st.sidebar:
+
+    st.title("🌾 AEGIS")
+
+    st.markdown(
+        """
+        **Agricultural Geospatial Intelligence System**
+
+        AEGIS is a web-based geospatial dashboard developed to visualize
+        reported **stem borer infestation in Norala, South Cotabato for 2025**.
+
+        The dashboard presents four indicators:
+
+        - Report frequency
+        - Affected rice area
+        - Mean damage severity
+        - Infestation Priority Index (IPI)
+        """
+    )
+
+    st.divider()
+
+    st.subheader("About the IPI")
+
+    st.markdown(
+        """
+        The **Infestation Priority Index (IPI)** combines:
+
+        **Report Frequency + Affected Area + Severity**
+
+        Each indicator was normalized from **0 to 1** and given equal weight.
+
+        Higher IPI values indicate greater relative priority for stem borer
+        monitoring and management.
+        """
+    )
+
+    st.divider()
+
+    st.caption(
+        "Data source: Municipal Agriculture Office (MAO), Norala, 2025"
+    )
+
+
+# ==================================================
+# HEADER
+# ==================================================
 
 st.title("🌾 AEGIS")
+
 st.subheader(
     "Web-Based Geospatial Dashboard for Stem Borer Infestation "
     "in Norala, South Cotabato"
 )
 
 st.caption(
-    "Visualization of reported stem borer infestation data for 2025"
+    "Barangay-level visualization of reported stem borer infestation data for 2025"
 )
 
 
-# --------------------------------------------------
-# SUMMARY STATISTICS
-# --------------------------------------------------
+# ==================================================
+# SUMMARY CARDS
+# ==================================================
 
 affected = df[df["Total Reports"] > 0]
 
@@ -102,33 +149,46 @@ total_reports = int(df["Total Reports"].sum())
 total_area = df["Affected Area (ha)"].sum()
 affected_barangays = len(affected)
 
-if not affected.empty:
-    highest_priority = affected.loc[affected["IPI"].idxmax(), "Barangay"]
-else:
-    highest_priority = "None"
+highest_row = affected.loc[affected["IPI"].idxmax()]
+
+highest_barangay = highest_row["Barangay"]
+highest_ipi = highest_row["IPI"]
 
 
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric("Total Reports", f"{total_reports}")
+    st.metric(
+        "Total Reports",
+        f"{total_reports}"
+    )
 
 with col2:
-    st.metric("Affected Rice Area", f"{total_area:.2f} ha")
+    st.metric(
+        "Affected Rice Area",
+        f"{total_area:.2f} ha"
+    )
 
 with col3:
-    st.metric("Affected Barangays", f"{affected_barangays}")
+    st.metric(
+        "Affected Barangays",
+        f"{affected_barangays}"
+    )
 
 with col4:
-    st.metric("Highest Priority", highest_priority)
+    st.metric(
+        "Highest IPI",
+        f"{highest_barangay}",
+        f"IPI = {highest_ipi:.3f}"
+    )
 
 
 st.divider()
 
 
-# --------------------------------------------------
-# INTERACTIVE MAP
-# --------------------------------------------------
+# ==================================================
+# MAP SECTION
+# ==================================================
 
 st.header("Interactive Stem Borer Infestation Map")
 
@@ -153,35 +213,36 @@ field_dictionary = {
 selected_field = field_dictionary[indicator]
 
 
-# Create map centered on Norala
-m = folium.Map(
-    location=[6.52, 124.68],
-    zoom_start=12,
-    tiles="OpenStreetMap"
-)
+# ==================================================
+# COLOR CLASSIFICATION
+# ==================================================
 
-
-# Color functions
 def get_color(value, field):
+
     try:
         value = float(value)
     except (TypeError, ValueError):
         value = 0
 
+    # No infestation
     if value == 0:
-        return "#f2f2f2"
+        return "#eeeeee"
 
+    # REPORT FREQUENCY
     if field == "Total_Repo":
-        if value <= 5:
-            return "#fde0dd"
-        elif value <= 10:
-            return "#fa9fb5"
-        elif value <= 20:
-            return "#f768a1"
-        else:
-            return "#ae017e"
 
+        if value <= 5:
+            return "#fee5d9"
+        elif value <= 10:
+            return "#fcae91"
+        elif value <= 20:
+            return "#fb6a4a"
+        else:
+            return "#cb181d"
+
+    # AFFECTED AREA
     elif field == "Affected_A":
+
         if value <= 10:
             return "#fee5d9"
         elif value <= 20:
@@ -191,7 +252,9 @@ def get_color(value, field):
         else:
             return "#cb181d"
 
+    # SEVERITY
     elif field == "Severity":
+
         if value <= 20:
             return "#fee5d9"
         elif value <= 40:
@@ -201,7 +264,9 @@ def get_color(value, field):
         else:
             return "#cb181d"
 
+    # IPI
     elif field == "IPI":
+
         if value <= 0.20:
             return "#fee5d9"
         elif value <= 0.40:
@@ -211,17 +276,123 @@ def get_color(value, field):
         else:
             return "#cb181d"
 
-    return "#f2f2f2"
+    return "#eeeeee"
+
+
+# ==================================================
+# DYNAMIC LEGEND
+# ==================================================
+
+if indicator == "Total Reports":
+
+    legend_title = "Number of Reported Infestations"
+
+    legend_items = [
+        ("#eeeeee", "No reported infestation"),
+        ("#fee5d9", "Low: 1–5 reports"),
+        ("#fcae91", "Moderate: 6–10 reports"),
+        ("#fb6a4a", "High: 11–20 reports"),
+        ("#cb181d", "Very High: 21–40 reports")
+    ]
+
+elif indicator == "Affected Area (ha)":
+
+    legend_title = "Affected Rice Area"
+
+    legend_items = [
+        ("#eeeeee", "No reported affected area"),
+        ("#fee5d9", "0.1–10 ha"),
+        ("#fcae91", "10.1–20 ha"),
+        ("#fb6a4a", "20.1–40 ha"),
+        ("#cb181d", "40.1 ha and above")
+    ]
+
+elif indicator == "Severity (%)":
+
+    legend_title = "Mean Damage Severity"
+
+    legend_items = [
+        ("#eeeeee", "No reported infestation"),
+        ("#fee5d9", "0.1–20%"),
+        ("#fcae91", "20.1–40%"),
+        ("#fb6a4a", "40.1–60%"),
+        ("#cb181d", "60.1–80%")
+    ]
+
+else:
+
+    legend_title = "Infestation Priority Index"
+
+    legend_items = [
+        ("#eeeeee", "No reported infestation"),
+        ("#fee5d9", "Low: 0.001–0.200"),
+        ("#fcae91", "Moderate: 0.201–0.400"),
+        ("#fb6a4a", "High: 0.401–0.600"),
+        ("#cb181d", "Very High: 0.601–1.000")
+    ]
+
+
+legend_html = f"""
+<div style="
+    padding: 14px;
+    border: 1px solid #d0d0d0;
+    border-radius: 8px;
+    margin-bottom: 12px;
+">
+<b>{legend_title}</b><br><br>
+"""
+
+for color, label in legend_items:
+
+    legend_html += f"""
+    <div style="margin-bottom:6px;">
+        <span style="
+            display:inline-block;
+            width:18px;
+            height:18px;
+            background:{color};
+            border:1px solid #555;
+            margin-right:8px;
+            vertical-align:middle;
+        "></span>
+        {label}
+    </div>
+    """
+
+legend_html += "</div>"
+
+st.markdown(legend_html, unsafe_allow_html=True)
+
+
+# ==================================================
+# CREATE MAP
+# ==================================================
+
+m = folium.Map(
+    location=[6.52, 124.68],
+    zoom_start=12,
+    tiles="CartoDB positron"
+)
 
 
 def style_function(feature):
+
     value = feature["properties"].get(selected_field, 0)
 
     return {
         "fillColor": get_color(value, selected_field),
         "color": "#333333",
-        "weight": 1,
-        "fillOpacity": 0.75
+        "weight": 1.2,
+        "fillOpacity": 0.80
+    }
+
+
+def highlight_function(feature):
+
+    return {
+        "weight": 3,
+        "color": "#000000",
+        "fillOpacity": 0.90
     }
 
 
@@ -242,106 +413,165 @@ tooltip = folium.GeoJsonTooltip(
         "IPI:",
         "Priority:"
     ],
-    localize=True,
-    sticky=False,
+    sticky=True,
     labels=True
 )
 
 
 folium.GeoJson(
     geojson_data,
-    name="Stem Borer Data",
+    name="Stem Borer Infestation",
     style_function=style_function,
+    highlight_function=highlight_function,
     tooltip=tooltip
 ).add_to(m)
 
 
-folium.LayerControl().add_to(m)
+# Automatically fit map to municipality
+all_coordinates = []
+
+for feature in geojson_data["features"]:
+
+    geometry = feature["geometry"]
+
+    if geometry["type"] == "Polygon":
+
+        for ring in geometry["coordinates"]:
+            for lon, lat in ring:
+                all_coordinates.append([lat, lon])
+
+    elif geometry["type"] == "MultiPolygon":
+
+        for polygon in geometry["coordinates"]:
+            for ring in polygon:
+                for lon, lat in ring:
+                    all_coordinates.append([lat, lon])
+
+
+if all_coordinates:
+
+    lats = [x[0] for x in all_coordinates]
+    lons = [x[1] for x in all_coordinates]
+
+    bounds = [
+        [min(lats), min(lons)],
+        [max(lats), max(lons)]
+    ]
+
+    m.fit_bounds(bounds)
 
 
 st_folium(
     m,
-    width=None,
-    height=600,
+    height=620,
     use_container_width=True
 )
 
-
 st.caption(
-    "Hover over a barangay to view its reported infestation statistics."
+    "Hover over a barangay to view its infestation statistics."
 )
 
 
-# --------------------------------------------------
+# ==================================================
 # BARANGAY ANALYSIS
-# --------------------------------------------------
+# ==================================================
 
 st.divider()
 
 st.header("Barangay-Level Analysis")
 
-affected_sorted_reports = affected.sort_values(
+
+# REPORTS
+reports_df = affected.sort_values(
     "Total Reports",
     ascending=True
 )
 
 fig_reports = px.bar(
-    affected_sorted_reports,
+    reports_df,
     x="Total Reports",
     y="Barangay",
     orientation="h",
-    title="Number of Reported Stem Borer Infestations by Barangay",
-    labels={"Total Reports": "Number of Reports"}
+    title="Number of Reported Stem Borer Infestations by Barangay"
 )
 
-st.plotly_chart(fig_reports, use_container_width=True)
+fig_reports.update_layout(
+    yaxis_title="",
+    xaxis_title="Number of Reports"
+)
+
+st.plotly_chart(
+    fig_reports,
+    use_container_width=True
+)
 
 
-affected_sorted_area = affected.sort_values(
+# AFFECTED AREA
+area_df = affected.sort_values(
     "Affected Area (ha)",
     ascending=True
 )
 
 fig_area = px.bar(
-    affected_sorted_area,
+    area_df,
     x="Affected Area (ha)",
     y="Barangay",
     orientation="h",
-    title="Total Rice Area Affected by Stem Borer",
-    labels={"Affected Area (ha)": "Affected Area (ha)"}
+    title="Total Rice Area Affected by Stem Borer"
 )
 
-st.plotly_chart(fig_area, use_container_width=True)
+fig_area.update_layout(
+    yaxis_title="",
+    xaxis_title="Affected Rice Area (ha)"
+)
+
+st.plotly_chart(
+    fig_area,
+    use_container_width=True
+)
 
 
-affected_sorted_severity = affected.sort_values(
+# SEVERITY
+severity_df = affected.sort_values(
     "Severity (%)",
     ascending=True
 )
 
 fig_severity = px.bar(
-    affected_sorted_severity,
+    severity_df,
     x="Severity (%)",
     y="Barangay",
     orientation="h",
-    title="Mean Stem Borer Damage Severity by Barangay",
-    labels={"Severity (%)": "Mean Damage Severity (%)"}
+    title="Mean Stem Borer Damage Severity by Barangay"
 )
 
-fig_severity.update_xaxes(range=[0, 100])
+fig_severity.update_xaxes(
+    range=[0, 100]
+)
 
-st.plotly_chart(fig_severity, use_container_width=True)
+fig_severity.update_layout(
+    yaxis_title="",
+    xaxis_title="Mean Damage Severity (%)"
+)
+
+st.plotly_chart(
+    fig_severity,
+    use_container_width=True
+)
 
 
-# --------------------------------------------------
-# DATA TABLE
-# --------------------------------------------------
+# ==================================================
+# PRIORITY RANKING
+# ==================================================
 
 st.divider()
 
-st.header("Barangay Summary")
+st.header("Infestation Priority Ranking")
 
-display_df = df[
+priority_df = affected.sort_values(
+    "IPI",
+    ascending=False
+)[
     [
         "Barangay",
         "Total Reports",
@@ -350,23 +580,25 @@ display_df = df[
         "IPI",
         "Priority"
     ]
-].sort_values("IPI", ascending=False)
+]
+
+priority_df["IPI"] = priority_df["IPI"].round(3)
 
 st.dataframe(
-    display_df,
+    priority_df,
     use_container_width=True,
     hide_index=True
 )
 
 
-# --------------------------------------------------
+# ==================================================
 # FOOTER
-# --------------------------------------------------
+# ==================================================
 
 st.divider()
 
 st.caption(
-    "Data source: Municipal Agriculture Office (MAO), Norala, 2025. "
-    "The Infestation Priority Index (IPI) combines normalized report "
-    "frequency, affected rice area, and mean damage severity using equal weights."
+    "Source: Municipal Agriculture Office (MAO), Norala, South Cotabato, 2025. "
+    "AEGIS is a visualization and decision-support prototype based on available "
+    "2025 barangay-level stem borer infestation records."
 )
